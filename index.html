@@ -29,6 +29,11 @@
     .card-container {
   perspective: 800px;
 }
+
+.order-item {
+  transition: border 0.3s;
+}
+
 .card-flip {
   width: 100%;
   border-radius: 12px;
@@ -96,6 +101,8 @@
 
   <!-- GAME -->
   <div id="gameUI" style="display:none">
+    <button id="btnCheckOrder" class="btn-ghost">Verificar Ordem</button>
+
     <div class="card cols-3 grid">
       <div>
         <div style="display:flex;justify-content:space-between;align-items:center">
@@ -160,158 +167,186 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 <!-- Firebase v9 via CDN (modular) -->
 <script type="module">
-  const firebaseConfig = {
-    apiKey: "AIzaSyAbCzvApuufT2nXKh6f_h90u2P7WOsUP74",
-    authDomain: "ito-online-620e6.firebaseapp.com",
-    databaseURL: "https://ito-online-620e6-default-rtdb.firebaseio.com/",
-    projectId: "ito-online-620e6",
-    storageBucket: "ito-online-620e6.firebasestorage.app",
-    messagingSenderId: "275100669541",
-    appId: "1:275100669541:web:366051288a8c209c0a988c",
-    measurementId: "G-5LHBN77142"
-  };
+const firebaseConfig = {
+  apiKey: "AIzaSyAbCzvApuufT2nXKh6f_h90u2P7WOsUP74",
+  authDomain: "ito-online-620e6.firebaseapp.com",
+  databaseURL: "https://ito-online-620e6-default-rtdb.firebaseio.com/",
+  projectId: "ito-online-620e6",
+  storageBucket: "ito-online-620e6.firebasestorage.app",
+  messagingSenderId: "275100669541",
+  appId: "1:275100669541:web:366051288a8c209c0a988c",
+  measurementId: "G-5LHBN77142"
+};
 
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-  import { getDatabase, ref, set, update, onValue, push, runTransaction } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+import { getDatabase, ref, set, update, onValue, runTransaction } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js";
 
-  const app = initializeApp(firebaseConfig);
-  const db = getDatabase(app);
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
 
-  const uid = Math.random().toString(36).slice(2,9);
-  let isHost = false;
-  let currentRoom = null;
-  let myName = "";
-  let localRoomSnapshot = null;
+const uid = Math.random().toString(36).slice(2,9);
+let isHost = false;
+let currentRoom = null;
+let myName = "";
+let localRoomSnapshot = null;
 
-  const el = id => document.getElementById(id);
-  const btnCreate = el('btnCreate');
-  const btnJoin = el('btnJoin');
-  const btnCopyLink = el('btnCopyLink');
-  const btnCopyLink2 = el('btnCopyLink2');
-  const btnDeal = el('btnDeal');
-  const btnOrdering = el('btnOrdering');
-  const btnReveal = el('btnReveal');
-  const btnNextRound = el('btnNextRound');
+const el = id => document.getElementById(id);
+const btnCreate = el('btnCreate');
+const btnJoin = el('btnJoin');
+const btnCopyLink = el('btnCopyLink');
+const btnCopyLink2 = el('btnCopyLink2');
+const btnDeal = el('btnDeal');
+const btnOrdering = el('btnOrdering');
+const btnReveal = el('btnReveal');
+const btnNextRound = el('btnNextRound');
 
-  btnCreate.addEventListener('click', ()=>joinRoom(true));
-  btnJoin.addEventListener('click', ()=>joinRoom(false));
-  btnCopyLink.addEventListener('click', copyLink);
-  btnCopyLink2.addEventListener('click', copyLink);
-  btnDeal.addEventListener('click', startDeal);
-  btnOrdering.addEventListener('click', goOrdering);
-  btnReveal.addEventListener('click', revealNumbers);
-  btnNextRound.addEventListener('click', nextRound);
+btnCreate.addEventListener('click', ()=>joinRoom(true));
+btnJoin.addEventListener('click', ()=>joinRoom(false));
+btnCopyLink.addEventListener('click', copyLink);
+btnCopyLink2.addEventListener('click', copyLink);
+btnDeal.addEventListener('click', startDeal);
+btnOrdering.addEventListener('click', goOrdering);
+btnReveal.addEventListener('click', revealNumbers);
+btnNextRound.addEventListener('click', nextRound);
+el('btnCheckOrder').addEventListener('click', ()=> {
+  if(!localRoomSnapshot) return;
+  const order = localRoomSnapshot.order;
+  const players = localRoomSnapshot.players;
 
-  // Preenche campo de sala pelo hash da URL
-  window.addEventListener('load', ()=> {
-    const hash = location.hash.replace('#','');
-    if(hash) el('roomInput').value = hash;
+  let isCorrect = true;
+  const area = el('orderRevealArea');
+
+  Array.from(area.children).forEach((cardWrapper, idx) => {
+    const playerId = cardWrapper.dataset.id;
+    const correctNumber = players[order[idx]].number;
+    const actualNumber = players[playerId].number;
+
+    if(playerId !== order[idx]){
+      cardWrapper.style.border = '2px solid #ff4d4d'; // vermelho
+      isCorrect = false;
+    } else {
+      cardWrapper.style.border = '2px solid #10b981'; // verde
+    }
   });
 
-  function joinRoom(asHost=false){
-    myName = el('name').value.trim() || ('Player-'+uid);
-    let roomId = el('roomInput').value.trim().toUpperCase();
-    if(!roomId && asHost) roomId = Math.random().toString(36).slice(2,6).toUpperCase();
-    if(!roomId){ alert('Coloque um código de sala ou crie uma.'); return; }
+  if(isCorrect){
+    alert('Parabéns! Ordem correta ✅');
+  } else {
+    alert('Ainda não está certo ❌');
+  }
+});
 
-    currentRoom = roomId;
-    isHost = Boolean(asHost);
 
-    const playerData = { id: uid, name: myName, host: isHost, number: null, hint:'', ready:false, joinedAt: Date.now() };
 
-    if(isHost){
-      set(ref(db, `rooms/${currentRoom}`), {
-        createdAt: Date.now(),
-        hostId: uid,
-        theme: el('themeInput').value || '',
-        range: { min: Number(el('minRange').value||1), max: Number(el('maxRange').value||100) },
-        phase: 'lobby',
-        round: 1,
-        players: { [uid]: playerData },
-        order: []
-      }).catch(console.error);
-    } else {
-      update(ref(db, `rooms/${currentRoom}/players/${uid}`), playerData).catch(console.error);
-    }
+window.addEventListener('load', ()=> {
+  const hash = location.hash.replace('#','');
+  if(hash) el('roomInput').value = hash;
+});
 
-    el('setup').style.display='none';
-    el('gameUI').style.display='block';
-    el('meName').textContent = myName;
-    el('meRole').textContent = isHost?'Anfitrião':'Jogador';
-    el('roomId').textContent = currentRoom;
-    el('roomLink').value = location.origin + location.pathname + '#' + currentRoom;
-    location.hash = currentRoom;
+function joinRoom(asHost=false){
+  myName = el('name').value.trim() || ('Player-'+uid);
+  let roomId = el('roomInput').value.trim().toUpperCase();
+  if(!roomId && asHost) roomId = Math.random().toString(36).slice(2,6).toUpperCase();
+  if(!roomId){ alert('Coloque um código de sala ou crie uma.'); return; }
 
-    listenRoom();
+  currentRoom = roomId;
+  isHost = Boolean(asHost);
+
+  const playerData = { id: uid, name: myName, host: isHost, number: null, hint:'', ready:false, joinedAt: Date.now() };
+
+  if(isHost){
+    set(ref(db, `rooms/${currentRoom}`), {
+      createdAt: Date.now(),
+      hostId: uid,
+      theme: el('themeInput').value || '',
+      range: { min: Number(el('minRange').value||1), max: Number(el('maxRange').value||100) },
+      phase: 'lobby',
+      round: 1,
+      players: { [uid]: playerData },
+      order: []
+    }).catch(console.error);
+  } else {
+    update(ref(db, `rooms/${currentRoom}/players/${uid}`), playerData).catch(console.error);
   }
 
-  function copyLink(){
-    const text = el('roomLink').value || (location.origin+location.pathname+'#'+el('roomInput').value.trim());
-    navigator.clipboard?.writeText(text);
-    alert('Link copiado!');
-  }
+  el('setup').style.display='none';
+  el('gameUI').style.display='block';
+  el('meName').textContent = myName;
+  el('meRole').textContent = isHost?'Anfitrião':'Jogador';
+  el('roomId').textContent = currentRoom;
+  el('roomLink').value = location.origin + location.pathname + '#' + currentRoom;
+  location.hash = currentRoom;
 
-  function listenRoom(){
-    const refRoom = ref(db, `rooms/${currentRoom}`);
-    onValue(refRoom, snap => { localRoomSnapshot = snap.val() || {}; renderRoom(localRoomSnapshot); });
-    onValue(ref(db, `rooms/${currentRoom}/players`), snap => { renderPlayers(snap.val() || {}); });
-  }
+  listenRoom();
+}
 
-  function renderPlayers(playersObj){
-    const list = el('players'); list.innerHTML='';
-    Object.values(playersObj).sort((a,b)=> (a.joinedAt||0)-(b.joinedAt||0)).forEach(p=>{
-      const hostLabel = p.host?' (Host)':'';
-      const div=document.createElement('div'); div.className='player';
-      div.innerHTML=`<div><strong>${escapeHtml(p.name)}</strong>${hostLabel}<div class="muted small">${p.hint?'Dica: '+escapeHtml(p.hint):''}</div></div><div class="small">${p.ready?'✅':''}</div>`;
-      list.appendChild(div);
+function copyLink(){
+  const text = el('roomLink').value || (location.origin+location.pathname+'#'+el('roomInput').value.trim());
+  navigator.clipboard?.writeText(text);
+  alert('Link copiado!');
+}
+
+function listenRoom(){
+  const refRoom = ref(db, `rooms/${currentRoom}`);
+  onValue(refRoom, snap => { localRoomSnapshot = snap.val() || {}; renderRoom(localRoomSnapshot); });
+  onValue(ref(db, `rooms/${currentRoom}/players`), snap => { renderPlayers(snap.val() || {}); });
+}
+
+function renderPlayers(playersObj){
+  const list = el('players'); list.innerHTML='';
+  Object.values(playersObj).sort((a,b)=> (a.joinedAt||0)-(b.joinedAt||0)).forEach(p=>{
+    const hostLabel = p.host?' (Host)':'';
+    const div=document.createElement('div'); div.className='player';
+    div.innerHTML=`<div><strong>${escapeHtml(p.name)}</strong>${hostLabel}<div class="muted small">${p.hint?'Dica: '+escapeHtml(p.hint):''}</div></div><div class="small">${p.ready?'✅':''}</div>`;
+    list.appendChild(div);
+  });
+}
+
+function renderRoom(room){
+  if(!room) return;
+  el('roundInfo').textContent=`Rodada ${room.round||1} • Fase: ${room.phase||'—'}`;
+  if(room.theme!==undefined) el('themeInput').value = room.theme||'';
+  if(room.range){ el('minRange').value=room.range.min; el('maxRange').value=room.range.max; }
+
+  const panel=el('phasePanel'); panel.innerHTML=''; 
+  const phase=room.phase||'lobby';
+
+  if(phase==='lobby'){
+    panel.innerHTML=`<div class="small muted">Ainda em lobby. Aguarde jogadores.</div>
+      <div style="margin-top:8px"><button id="btnSetTheme" class="btn-ghost">Salvar tema</button></div>`;
+    panel.querySelector('#btnSetTheme').addEventListener('click', ()=>{
+      update(ref(db, `rooms/${currentRoom}`), { theme: el('themeInput').value || ''});
+      alert('Tema atualizado.');
     });
   }
 
-  function renderRoom(room){
-  // ... código existente acima permanece igual ...
-
-  function renderRoom(room){
-    if(!room) return;
-    el('roundInfo').textContent=`Rodada ${room.round||1} • Fase: ${room.phase||'—'}`;
-    if(room.theme!==undefined) el('themeInput').value = room.theme||'';
-    if(room.range){ el('minRange').value=room.range.min; el('maxRange').value=room.range.max; }
-
-    const panel=el('phasePanel'); panel.innerHTML=''; const phase=room.phase||'lobby';
-    if(phase==='lobby'){
-      panel.innerHTML=`<div class="small muted">Ainda em lobby. Aguarde jogadores.</div>
-        <div style="margin-top:8px"><button id="btnSetTheme" class="btn-ghost">Salvar tema</button></div>`;
-      panel.querySelector('#btnSetTheme').addEventListener('click', ()=>{
-        update(ref(db, `rooms/${currentRoom}`), { theme: el('themeInput').value || ''});
-        alert('Tema atualizado.');
+  if(phase==='dealt'){
+    const me=(room.players&&room.players[uid])||null;
+    if(me){
+      panel.innerHTML=`<div class="small muted">Seu número secreto</div>
+        <div style="font-weight:700;font-size:24px;margin-top:6px">${me.number??'—'}</div>
+        <div style="margin-top:8px" class="hint-input">
+          <input id="hintTxt" placeholder="Sua dica (sem falar o número)" />
+          <button id="btnSendHint" class="btn-ghost">Enviar dica</button>
+        </div>`;
+      if(me.hint) el('hintTxt').value=me.hint;
+      panel.querySelector('#btnSendHint').addEventListener('click', ()=>{
+        const hint=el('hintTxt').value.trim();
+        update(ref(db, `rooms/${currentRoom}/players/${uid}`), { hint, ready:true });
       });
-    }
-
-    if(phase==='dealt'){
-      const me=(room.players&&room.players[uid])||null;
-      if(me){
-        panel.innerHTML=`<div class="small muted">Seu número secreto</div>
-          <div style="font-weight:700;font-size:24px;margin-top:6px">${me.number??'—'}</div>
-          <div style="margin-top:8px" class="hint-input">
-            <input id="hintTxt" placeholder="Sua dica (sem falar o número)" />
-            <button id="btnSendHint" class="btn-ghost">Enviar dica</button>
-          </div>`;
-        if(me.hint) el('hintTxt').value=me.hint;
-        panel.querySelector('#btnSendHint').addEventListener('click', ()=>{
-          const hint=el('hintTxt').value.trim();
-          update(ref(db, `rooms/${currentRoom}/players/${uid}`), { hint, ready:true });
-        });
-      } else panel.innerHTML='<div class="small muted">Espere o host distribuir as cartas.</div>';
-    }
-
-    if(phase==='ordering'){ panel.innerHTML='<div class="small muted">Ordenando: host move os itens. Jogadores veem as dicas.</div>'; }
-    if(phase==='reveal'){ panel.innerHTML='<div class="small muted">Números revelados — confira o resultado abaixo.</div>'; }
-
-    renderOrderReveal(room);
+    } else panel.innerHTML='<div class="small muted">Espere o host distribuir as cartas.</div>';
   }
 
-  function renderOrderReveal(room){
+  if(phase==='ordering'){ panel.innerHTML='<div class="small muted">Ordenando: host move os itens. Jogadores veem as dicas.</div>'; }
+  if(phase==='reveal'){ panel.innerHTML='<div class="small muted">Números revelados — confira o resultado abaixo.</div>'; }
+
+  renderOrderReveal(room);
+}
+
+function renderOrderReveal(room){
   const area = el('orderRevealArea');
   area.innerHTML = '';
   const order = room.order || [];
@@ -321,115 +356,100 @@
     const p = players[id];
     const cardWrapper = document.createElement('div');
     cardWrapper.className = 'order-item card-container';
-    
+    cardWrapper.dataset.id = id;
+
     const card = document.createElement('div');
     card.className = 'card-flip';
     if(room.phase === 'reveal') card.classList.add('flipped');
 
-    // frente da carta
     const front = document.createElement('div');
     front.className = 'card-front';
     front.innerHTML = `<strong>${escapeHtml(p.name)}</strong>
       <div class="muted small">${p.hint?'Dica: '+escapeHtml(p.hint):''}</div>`;
 
-    // verso da carta
     const back = document.createElement('div');
     back.className = 'card-back';
     back.innerHTML = `Número: ${p.number}`;
 
     card.appendChild(front);
     card.appendChild(back);
-
-    // controles do host
-    if(room.phase === 'ordering' && isHost){
-      const controls = document.createElement('div');
-      controls.style.display = 'flex';
-      controls.style.gap = '4px';
-      const up = document.createElement('button'); up.textContent='⬆'; up.className='btn-ghost';
-      const down = document.createElement('button'); down.textContent='⬇'; down.className='btn-ghost';
-      up.onclick = ()=>moveCard(id, -1);
-      down.onclick = ()=>moveCard(id, 1);
-      controls.appendChild(up);
-      controls.appendChild(down);
-      card.appendChild(controls);
-    }
-
     cardWrapper.appendChild(card);
     area.appendChild(cardWrapper);
   });
+
+  // Ativar drag-and-drop apenas se for host e estiver na fase de ordering
+  if(isHost && room.phase === 'ordering'){
+    Sortable.create(area, {
+      animation: 150,
+      onEnd: () => {
+        const newOrder = Array.from(area.children).map(el => el.dataset.id);
+        update(ref(db, `rooms/${currentRoom}`), { order: newOrder });
+      }
+    });
+  }
 }
 
-  function moveCard(id, delta){
-    if(!isHost) return;
-    runTransaction(ref(db, `rooms/${currentRoom}/order`), cur=>{
-      if(!cur) return cur;
-      const idx = cur.indexOf(id);
-      if(idx === -1) return cur;
-      const newIdx = Math.max(0, Math.min(cur.length-1, idx+delta));
-      if(newIdx===idx) return cur;
-      const copy = [...cur];
-      copy.splice(idx,1);
-      copy.splice(newIdx,0,id);
-      return copy;
-    });
-    }
+function moveCard(id, delta){
+  if(!isHost) return;
+  runTransaction(ref(db, `rooms/${currentRoom}/order`), cur=>{
+    if(!cur) return cur;
+    const idx = cur.indexOf(id);
+    if(idx === -1) return cur;
+    const newIdx = Math.max(0, Math.min(cur.length-1, idx+delta));
+    if(newIdx===idx) return cur;
+    const copy = [...cur];
+    copy.splice(idx,1);
+    copy.splice(newIdx,0,id);
+    return copy;
+  });
+}
 
-    if(phase==='dealt'){
-      const me=(room.players&&room.players[uid])||null;
-      if(me){
-        panel.innerHTML=`<div class="small muted">Seu número secreto</div>
-          <div style="font-weight:700;font-size:24px;margin-top:6px">${me.number??'—'}</div>
-          <div style="margin-top:8px" class="hint-input">
-            <input id="hintTxt" placeholder="Sua dica (sem falar o número)" />
-            <button id="btnSendHint" class="btn-ghost">Enviar dica</button>
-          </div>`;
-        if(me.hint) el('hintTxt').value=me.hint;
-        panel.querySelector('#btnSendHint').addEventListener('click', ()=>{
-          const hint=el('hintTxt').value.trim();
-          update(ref(db, `rooms/${currentRoom}/players/${uid}`), { hint, ready:true });
-        });
-      } else panel.innerHTML='<div class="small muted">Espere o host distribuir as cartas.</div>';
-    }
+function startDeal(){
+  if(!isHost){ alert('Somente o host pode distribuir.'); return; }
+  const room=localRoomSnapshot||{};
+  const players=Object.values(room.players||{});
+  if(players.length<1){ alert('Precisa de pelo menos 2 jogadores.'); return; }
+  const min=Number(el('minRange').value||1), max=Number(el('maxRange').value||100);
+  if(max-min+1<players.length){ alert('Intervalo pequeno demais para jogadores.'); return; }
 
-    if(phase==='ordering'){ panel.innerHTML='<div class="small muted">Ordenando: host move os itens. Jogadores veem as dicas.</div>'; }
-    if(phase==='reveal'){ panel.innerHTML='<div class="small muted">Números revelados — confira o resultado abaixo.</div>'; }
-  }
+  const numbers=uniqueRandoms(players.length,min,max);
+  const updates={};
+  players.forEach((p,i)=>{ updates[p.id]={...p,number:numbers[i],hint:'',ready:false}; });
 
-  function startDeal(){
-    if(!isHost){ alert('Somente o host pode distribuir.'); return; }
-    const room=localRoomSnapshot||{};
-    const players=Object.values(room.players||{});
-    if(players.length<2){ alert('Precisa de pelo menos 2 jogadores.'); return; }
-    const min=Number(el('minRange').value||1), max=Number(el('maxRange').value||100);
-    if(max-min+1<players.length){ alert('Intervalo pequeno demais para jogadores.'); return; }
+  update(ref(db, `rooms/${currentRoom}`), { phase:'dealt', order:players.map(p=>p.id), theme: el('themeInput').value||room.theme||'', range:{min,max} })
+  .then(()=>{ for(const id in updates) update(ref(db, `rooms/${currentRoom}/players/${id}`), updates[id]); });
+}
 
-    const numbers=uniqueRandoms(players.length,min,max);
-    const updates={};
-    players.forEach((p,i)=>{ updates[p.id]={...p,number:numbers[i],hint:'',ready:false}; });
+function goOrdering(){ if(!isHost){ alert('Somente host'); return; } update(ref(db, `rooms/${currentRoom}`), { phase:'ordering' }); }
+function revealNumbers(){ if(!isHost){ alert('Somente host'); return; } update(ref(db, `rooms/${currentRoom}`), { phase:'reveal' }); }
 
-    update(ref(db, `rooms/${currentRoom}`), { phase:'dealt', order:players.map(p=>p.id), theme: el('themeInput').value||room.theme||'', range:{min,max} })
-    .then(()=>{ for(const id in updates) update(ref(db, `rooms/${currentRoom}/players/${id}`), updates[id]); });
-  }
+function nextRound(){
+  if(!isHost){ alert('Somente host'); return; }
+  runTransaction(ref(db, `rooms/${currentRoom}`), cur=>{
+    if(!cur) return cur;
+    cur.phase='lobby';
+    cur.round=(cur.round||1)+1;
+    cur.order=[];
+    cur.theme=el('themeInput').value||cur.theme||'';
+    cur.range={min:Number(el('minRange').value||1), max:Number(el('maxRange').value||100)};
+    if(cur.players) Object.keys(cur.players).forEach(k=>{ cur.players[k].number=null; cur.players[k].hint=''; cur.players[k].ready=false; });
+    return cur;
+  });
+}
 
-  function goOrdering(){ if(!isHost){ alert('Somente host'); return; } update(ref(db, `rooms/${currentRoom}`), { phase:'ordering' }); }
-  function revealNumbers(){ if(!isHost){ alert('Somente host'); return; } update(ref(db, `rooms/${currentRoom}`), { phase:'reveal' }); }
+function uniqueRandoms(n,min,max){ 
+  const arr=[]; 
+  for(let i=min;i<=max;i++) arr.push(i); 
+  for(let i=arr.length-1;i>0;i--){ 
+    const j=Math.floor(Math.random()*(i+1)); 
+    [arr[i],arr[j]]=[arr[j],arr[i]]; 
+  } 
+  return arr.slice(0,n); 
+}
 
-  function nextRound(){
-    if(!isHost){ alert('Somente host'); return; }
-    runTransaction(ref(db, `rooms/${currentRoom}`), cur=>{
-      if(!cur) return cur;
-      cur.phase='lobby';
-      cur.round=(cur.round||1)+1;
-      cur.order=[];
-      cur.theme=el('themeInput').value||cur.theme||'';
-      cur.range={min:Number(el('minRange').value||1), max:Number(el('maxRange').value||100)};
-      if(cur.players) Object.keys(cur.players).forEach(k=>{ cur.players[k].number=null; cur.players[k].hint=''; cur.players[k].ready=false; });
-      return cur;
-    });
-  }
-
-  function uniqueRandoms(n,min,max){ const arr=[]; for(let i=min;i<=max;i++) arr.push(i); for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr.slice(0,n); }
-  function escapeHtml(s=''){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function escapeHtml(s=''){ 
+  return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); 
+}
 </script>
 </body>
 </html>
