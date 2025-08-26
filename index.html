@@ -26,7 +26,42 @@
     .hint-input{display:flex;gap:8px}
     .order-item{display:flex;justify-content:space-between;align-items:center;padding:8px;border-radius:10px;background:linear-gradient(90deg, rgba(255,255,255,0.01), rgba(255,255,255,0.02))}
     @media(max-width:840px){.cols-3{grid-template-columns:1fr} header{flex-direction:column;gap:10px} }
-  </style>
+    .card-container {
+  perspective: 800px;
+}
+.card-flip {
+  width: 100%;
+  border-radius: 12px;
+  background: #0b1220;
+  color: #e6eef6;
+  padding: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: default;
+  transition: transform 0.5s;
+  transform-style: preserve-3d;
+  position: relative;
+}
+
+.card-flip.flipped {
+  transform: rotateY(180deg);
+}
+
+.card-front, .card-back {
+  position: absolute;
+  width: 100%;
+  backface-visibility: hidden;
+}
+
+.card-back {
+  transform: rotateY(180deg);
+  background: linear-gradient(135deg, #10b981, #0f1724);
+  color: #042024;
+  font-weight: 700;
+}
+
+ </style>
 </head>
 <body>
 <div class="wrap">
@@ -235,6 +270,9 @@
   }
 
   function renderRoom(room){
+  // ... código existente acima permanece igual ...
+
+  function renderRoom(room){
     if(!room) return;
     el('roundInfo').textContent=`Rodada ${room.round||1} • Fase: ${room.phase||'—'}`;
     if(room.theme!==undefined) el('themeInput').value = room.theme||'';
@@ -248,6 +286,92 @@
         update(ref(db, `rooms/${currentRoom}`), { theme: el('themeInput').value || ''});
         alert('Tema atualizado.');
       });
+    }
+
+    if(phase==='dealt'){
+      const me=(room.players&&room.players[uid])||null;
+      if(me){
+        panel.innerHTML=`<div class="small muted">Seu número secreto</div>
+          <div style="font-weight:700;font-size:24px;margin-top:6px">${me.number??'—'}</div>
+          <div style="margin-top:8px" class="hint-input">
+            <input id="hintTxt" placeholder="Sua dica (sem falar o número)" />
+            <button id="btnSendHint" class="btn-ghost">Enviar dica</button>
+          </div>`;
+        if(me.hint) el('hintTxt').value=me.hint;
+        panel.querySelector('#btnSendHint').addEventListener('click', ()=>{
+          const hint=el('hintTxt').value.trim();
+          update(ref(db, `rooms/${currentRoom}/players/${uid}`), { hint, ready:true });
+        });
+      } else panel.innerHTML='<div class="small muted">Espere o host distribuir as cartas.</div>';
+    }
+
+    if(phase==='ordering'){ panel.innerHTML='<div class="small muted">Ordenando: host move os itens. Jogadores veem as dicas.</div>'; }
+    if(phase==='reveal'){ panel.innerHTML='<div class="small muted">Números revelados — confira o resultado abaixo.</div>'; }
+
+    renderOrderReveal(room);
+  }
+
+  function renderOrderReveal(room){
+  const area = el('orderRevealArea');
+  area.innerHTML = '';
+  const order = room.order || [];
+  const players = room.players || {};
+
+  order.forEach(id => {
+    const p = players[id];
+    const cardWrapper = document.createElement('div');
+    cardWrapper.className = 'order-item card-container';
+    
+    const card = document.createElement('div');
+    card.className = 'card-flip';
+    if(room.phase === 'reveal') card.classList.add('flipped');
+
+    // frente da carta
+    const front = document.createElement('div');
+    front.className = 'card-front';
+    front.innerHTML = `<strong>${escapeHtml(p.name)}</strong>
+      <div class="muted small">${p.hint?'Dica: '+escapeHtml(p.hint):''}</div>`;
+
+    // verso da carta
+    const back = document.createElement('div');
+    back.className = 'card-back';
+    back.innerHTML = `Número: ${p.number}`;
+
+    card.appendChild(front);
+    card.appendChild(back);
+
+    // controles do host
+    if(room.phase === 'ordering' && isHost){
+      const controls = document.createElement('div');
+      controls.style.display = 'flex';
+      controls.style.gap = '4px';
+      const up = document.createElement('button'); up.textContent='⬆'; up.className='btn-ghost';
+      const down = document.createElement('button'); down.textContent='⬇'; down.className='btn-ghost';
+      up.onclick = ()=>moveCard(id, -1);
+      down.onclick = ()=>moveCard(id, 1);
+      controls.appendChild(up);
+      controls.appendChild(down);
+      card.appendChild(controls);
+    }
+
+    cardWrapper.appendChild(card);
+    area.appendChild(cardWrapper);
+  });
+}
+
+  function moveCard(id, delta){
+    if(!isHost) return;
+    runTransaction(ref(db, `rooms/${currentRoom}/order`), cur=>{
+      if(!cur) return cur;
+      const idx = cur.indexOf(id);
+      if(idx === -1) return cur;
+      const newIdx = Math.max(0, Math.min(cur.length-1, idx+delta));
+      if(newIdx===idx) return cur;
+      const copy = [...cur];
+      copy.splice(idx,1);
+      copy.splice(newIdx,0,id);
+      return copy;
+    });
     }
 
     if(phase==='dealt'){
