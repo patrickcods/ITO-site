@@ -32,6 +32,49 @@ button{background:var(--accent);color:#042024;border:none;padding:8px 10px;borde
 .card-flip.flipped { transform: rotateY(180deg); }
 .card-front, .card-back { position: absolute; width: 100%; backface-visibility: hidden; }
 .card-back { transform: rotateY(180deg); background: linear-gradient(135deg, #10b981, #0f1724); color: #042024; font-weight: 700; }
+.order-phase.card {
+  width: 120px;
+  height: 160px;
+  font-size: 22px;
+}
+/* tamanho maior durante a fase de ordering */
+.order-item.ordering-size {
+  width: 180px;
+  min-height: 120px;
+}
+
+/* Reveal bar */
+.reveal-bar-outer{
+  width: 100%;
+  background: rgba(255,255,255,0.03);
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  border: 1px solid rgba(255,255,255,0.04);
+}
+
+.reveal-fill{
+  height: 100%;
+  transition: width 600ms ease;
+  display: block;
+}
+
+/* Texto sobre a barra (nome + número) */
+.reveal-label{
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  pointer-events:none;
+  font-weight:700;
+  color:#000; /* nossas HSL claras funcionam bem com texto escuro */
+}
+
 </style>
 </head>
 <body>
@@ -232,10 +275,11 @@ function joinRoom(asHost=false){
   currentRoom = roomId;
   isHost = Boolean(asHost);
 
-  const playerData = { id: uid, name: myName, host: isHost, number: null, hint:'', ready:false, joinedAt: Date.now() };
+  const basePlayer = { id: uid, name: myName, host: isHost, number: null, hint:'', ready:false, joinedAt: Date.now() };
 
   if(isHost){
-    // Cria a sala junto com o host
+    // Cria a sala e garante que o host seja adicionado como jogador com cor
+    const hostPlayer = { ...basePlayer, color: getUniqueColor({}) };
     set(ref(db, `rooms/${currentRoom}`), {
       createdAt: Date.now(),
       hostId: uid,
@@ -243,22 +287,23 @@ function joinRoom(asHost=false){
       range: { min: Number(el('minRange').value||1), max: Number(el('maxRange').value||100) },
       phase: 'lobby',
       round: 1,
-      players: { [uid]: playerData },
+      players: { [uid]: hostPlayer },
       order: []
     }).catch(console.error);
   } else {
-    // Garante que o jogador será adicionado mesmo que a sala exista ou não
-    const playerRef = ref(db, `rooms/${currentRoom}/players/${uid}`);
-    runTransaction(playerRef, cur => {
-      if(cur === null) {
-        // Sala já deve existir, mas se não existir, cria só o jogador
-        return playerData;
-      } else {
-        return {...cur, ...playerData};
-      }
-    });
+    // Adiciona/atualiza o jogador na lista de players usando transaction
+    const playersRef = ref(db, `rooms/${currentRoom}/players`);
+    runTransaction(playersRef, cur => {
+      if(cur === null) cur = {};
+      // se o jogador já existe, fazemos merge; se não, atribuímos uma cor não usada
+      const existing = cur[uid] || {};
+      const color = existing.color || getUniqueColor(cur);
+      cur[uid] = { ...existing, ...basePlayer, color };
+      return cur;
+    }).catch(console.error);
   }
 
+  // mostra UI local
   el('setup').style.display='none';
   el('gameUI').style.display='block';
   el('meName').textContent = myName;
@@ -268,11 +313,8 @@ function joinRoom(asHost=false){
   location.hash = currentRoom;
 
   listenRoom();
-
-  // Atribuir cor única via transaction
-  const colorRef = ref(db, `rooms/${currentRoom}/players/${uid}/color`);
-  runTransaction(colorRef, cur => cur || getUniqueColor(localRoomSnapshot?.players||{}));
 }
+
 
 
 function copyLink(){
@@ -344,37 +386,78 @@ function renderOrderReveal(room){
   const order = room.order || [];
   const players = room.players || {};
 
+  // calcula o maior número da sala para normalizar a barra (evita divisão por zero)
+  const allNums = Object.values(players).map(p => Number(p.number || 0));
+  let maxNumber = allNums.length ? Math.max(...allNums) : (room.range?.max || 1);
+  if(maxNumber <= 0) maxNumber = 1;
+  const MIN_FILL_PCT = 2; // garantia visual mínima (2%)
+
   order.forEach(id => {
-    const p = players[id];
+    const p = players[id] || { name:'—', number:0, color:COLORS[0] };
     const cardWrapper = document.createElement('div');
     cardWrapper.className = 'order-item card-container';
     cardWrapper.dataset.id = id;
 
-    const card = document.createElement('div');
-    card.className = 'card-flip';
-    if(room.phase === 'reveal') card.classList.add('flipped');
-
-    const front = document.createElement('div');
-    front.className = 'card-front';
-
-    let nameStyle = '';
+    // deixa os itens maiores durante a fase de ordering
     if(room.phase === 'ordering'){
-      nameStyle = `font-size:18px;color:${p.color||'#fff'};`;
+      cardWrapper.classList.add('ordering-size');
     }
 
-    front.innerHTML = `<strong style="${nameStyle}">${escapeHtml(p.name)}</strong>
-      <div class="muted small">${p.hint?'Dica: '+escapeHtml(p.hint):''}</div>`;
+    if(room.phase === 'reveal'){
+      // === BARRA PROPORCIONAL (reveal) ===
+      const barOuter = document.createElement('div');
+      barOuter.className = 'reveal-bar-outer';
 
-    const back = document.createElement('div');
-    back.className = 'card-back';
-    back.innerHTML = `Número: ${p.number}`;
+      const pct = Math.round((Number(p.number || 0) / maxNumber) * 100);
+      const fillPct = Math.max(pct, MIN_FILL_PCT);
 
-    card.appendChild(front);
-    card.appendChild(back);
-    cardWrapper.appendChild(card);
+      const fill = document.createElement('div');
+      fill.className = 'reveal-fill';
+      fill.style.width = fillPct + '%';
+      fill.style.background = p.color || '#10b981';
+
+      const label = document.createElement('div');
+      label.className = 'reveal-label';
+      label.innerHTML = `<span>${escapeHtml(p.name)}</span><span>${escapeHtml(String(p.number ?? '—'))}</span>`;
+
+      barOuter.appendChild(fill);
+      barOuter.appendChild(label);
+      cardWrapper.appendChild(barOuter);
+    } else {
+      // === CARTAS (lobby / dealt / ordering) — mostra também o número na ordering conforme pedido ===
+      const card = document.createElement('div');
+      card.className = 'card-flip';
+
+      const front = document.createElement('div');
+      front.className = 'card-front';
+
+      let nameStyle = '';
+      if(room.phase === 'ordering'){
+        nameStyle = `font-size:22px;color:${p.color||'#fff'};`;
+      }
+
+      // mostramos o número no front também (assim não "sumirá" quando for pra ordering)
+      front.innerHTML = `
+        <div>
+          <strong style="${nameStyle}">${escapeHtml(p.name)}</strong>
+        </div>
+        <div class="muted small">${p.hint? 'Dica: '+escapeHtml(p.hint) : ''}</div>
+        <div style="margin-top:8px;font-weight:700;font-size:16px">Número: ${escapeHtml(String(p.number ?? '—'))}</div>
+      `;
+
+      const back = document.createElement('div');
+      back.className = 'card-back';
+      back.innerHTML = `Número: ${p.number}`;
+
+      card.appendChild(front);
+      card.appendChild(back);
+      cardWrapper.appendChild(card);
+    }
+
     area.appendChild(cardWrapper);
   });
 
+  // Drag & drop só na fase de ordering e só para o host
   if(isHost && room.phase === 'ordering'){
     Sortable.create(area, {
       animation: 150,
