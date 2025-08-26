@@ -386,19 +386,17 @@ function renderOrderReveal(room){
   const order = room.order || [];
   const players = room.players || {};
 
-  // calcula o maior número da sala para normalizar a barra (evita divisão por zero)
-  const allNums = Object.values(players).map(p => Number(p.number || 0));
-  let maxNumber = allNums.length ? Math.max(...allNums) : (room.range?.max || 1);
-  if(maxNumber <= 0) maxNumber = 1;
-  const MIN_FILL_PCT = 2; // garantia visual mínima (2%)
+  // pega intervalo da rodada
+  const minNum = room.range?.min || 1;
+  const maxNum = room.range?.max || 100;
 
   order.forEach(id => {
-    const p = players[id] || { name:'—', number:0, color:COLORS[0] };
+    const p = players[id] || { name:'—', number:null, color:COLORS[0] };
     const cardWrapper = document.createElement('div');
     cardWrapper.className = 'order-item card-container';
     cardWrapper.dataset.id = id;
 
-    // deixa os itens maiores durante a fase de ordering
+    // aumenta tamanho durante a fase ordering
     if(room.phase === 'ordering'){
       cardWrapper.classList.add('ordering-size');
     }
@@ -408,12 +406,14 @@ function renderOrderReveal(room){
       const barOuter = document.createElement('div');
       barOuter.className = 'reveal-bar-outer';
 
-      const pct = Math.round((Number(p.number || 0) / maxNumber) * 100);
+      // calcula percentual baseado no intervalo da rodada
+      const pct = Math.round(((Number(p.number || minNum) - minNum) / (maxNum - minNum)) * 100);
+      const MIN_FILL_PCT = 2;
       const fillPct = Math.max(pct, MIN_FILL_PCT);
 
       const fill = document.createElement('div');
       fill.className = 'reveal-fill';
-      fill.style.width = fillPct + '%';
+      fill.style.width = '95%'; // sempre quase até o final
       fill.style.background = p.color || '#10b981';
 
       const label = document.createElement('div');
@@ -423,8 +423,9 @@ function renderOrderReveal(room){
       barOuter.appendChild(fill);
       barOuter.appendChild(label);
       cardWrapper.appendChild(barOuter);
+
     } else {
-      // === CARTAS (lobby / dealt / ordering) — mostra também o número na ordering conforme pedido ===
+      // === CARTAS (lobby / dealt / ordering) — números escondidos antes do reveal ===
       const card = document.createElement('div');
       card.className = 'card-flip';
 
@@ -436,13 +437,14 @@ function renderOrderReveal(room){
         nameStyle = `font-size:22px;color:${p.color||'#fff'};`;
       }
 
-      // mostramos o número no front também (assim não "sumirá" quando for pra ordering)
       front.innerHTML = `
         <div>
           <strong style="${nameStyle}">${escapeHtml(p.name)}</strong>
         </div>
         <div class="muted small">${p.hint? 'Dica: '+escapeHtml(p.hint) : ''}</div>
-        <div style="margin-top:8px;font-weight:700;font-size:16px">Número: ${escapeHtml(String(p.number ?? '—'))}</div>
+        <div style="margin-top:8px;font-weight:700;font-size:16px">
+          Número: —
+        </div>
       `;
 
       const back = document.createElement('div');
@@ -457,7 +459,7 @@ function renderOrderReveal(room){
     area.appendChild(cardWrapper);
   });
 
-  // Drag & drop só na fase de ordering e só para o host
+  // Drag & drop só na fase ordering e só para host
   if(isHost && room.phase === 'ordering'){
     Sortable.create(area, {
       animation: 150,
