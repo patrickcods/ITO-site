@@ -396,7 +396,7 @@ function renderOrderReveal(room){
       // === Após reveal: barra proporcional e número ===
       const barOuter = document.createElement('div');
       barOuter.className = 'reveal-bar-outer';
-      barOuter.style.width = '100%'; // ocupa quase toda a largura
+      barOuter.style.width = '100%';
 
       const allNums = Object.values(players).map(p => Number(p.number || 0));
       let maxNumber = allNums.length ? Math.max(...allNums) : 1;
@@ -417,26 +417,32 @@ function renderOrderReveal(room){
       cardWrapper.appendChild(barOuter);
 
     } else {
-      // === Antes do reveal: só nome, dica e cor ===
+      // === Antes do reveal: cada jogador vê só seu número, mais nome e dica ===
       const card = document.createElement('div');
       card.className = 'card-flip';
-      card.style.height = '140px';      // altura maior
-      card.style.padding = '16px';      // mais espaço interno
+      card.style.height = '140px';
+      card.style.padding = '16px';
       card.style.display = 'flex';
       card.style.alignItems = 'center';
       card.style.justifyContent = 'center';
-      card.style.background = p.color || '#0b1220'; // cor do jogador
+      card.style.background = p.color || '#0b1220';
       card.style.color = '#fff';
       card.style.borderRadius = '12px';
+      card.style.textAlign = 'center';
 
       const front = document.createElement('div');
       front.className = 'card-front';
       front.style.width = '100%';
-      front.style.textAlign = 'center';
+
+      let numberText = '—';
+      // mostra número apenas se for você
+      if(uid === id) numberText = p.number ?? '—';
+
       front.innerHTML = `
         <div style="display:flex;flex-direction:column;justify-content:center;height:100%;">
           <strong style="font-size:20px;">${escapeHtml(p.name)}</strong>
           <div class="muted small" style="margin-top:8px;">${p.hint ? 'Dica: '+escapeHtml(p.hint) : ''}</div>
+          <div style="margin-top:12px;font-weight:700;font-size:24px;">Número: ${escapeHtml(numberText)}</div>
         </div>
       `;
 
@@ -458,6 +464,7 @@ function renderOrderReveal(room){
     });
   }
 }
+
 
 
 function moveCard(id, delta){
