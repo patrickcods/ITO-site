@@ -131,37 +131,29 @@
 
   <!-- Firebase v9 via CDN (modular) -->
   <script type="module">
-    // ---------- SUBSTITUA AQUI PELO SEU firebaseConfig ----------
-
     const firebaseConfig = {
-        apiKey: "AIzaSyAbCzvApuufT2nXKh6f_h90u2P7WOsUP74",
-        authDomain: "ito-online-620e6.firebaseapp.com",
-        databaseURL: "https://ito-online-620e6-default-rtdb.firebaseio.com/",
-        projectId: "ito-online-620e6",
-        storageBucket: "ito-online-620e6.firebasestorage.app",
-        messagingSenderId: "275100669541",
-        appId: "1:275100669541:web:366051288a8c209c0a988c",
-        measurementId: "G-5LHBN77142"
-
+      apiKey: "AIzaSyAbCzvApuufT2nXKh6f_h90u2P7WOsUP74",
+      authDomain: "ito-online-620e6.firebaseapp.com",
+      databaseURL: "https://ito-online-620e6-default-rtdb.firebaseio.com/",
+      projectId: "ito-online-620e6",
+      storageBucket: "ito-online-620e6.firebasestorage.app",
+      messagingSenderId: "275100669541",
+      appId: "1:275100669541:web:366051288a8c209c0a988c",
+      measurementId: "G-5LHBN77142"
     };
-    // -----------------------------------------------------------
 
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-    import {
-      getDatabase, ref, set, update, onValue, push, remove, runTransaction
-    } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js";
+    import { getDatabase, ref, set, update, onValue, push, runTransaction } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js";
 
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
-    // --- Estado local
     const uid = Math.random().toString(36).slice(2,9);
     let isHost = false;
     let currentRoom = null;
     let myName = "";
     let localRoomSnapshot = null;
 
-    // --- Elementos
     const el = id => document.getElementById(id);
     const btnCreate = el('btnCreate');
     const btnJoin = el('btnJoin');
@@ -172,7 +164,6 @@
     const btnReveal = el('btnReveal');
     const btnNextRound = el('btnNextRound');
 
-    // Setup handlers
     btnCreate.addEventListener('click', createRoom);
     btnJoin.addEventListener('click', joinRoom);
     btnCopyLink.addEventListener('click', copyLink);
@@ -182,13 +173,11 @@
     btnReveal.addEventListener('click', revealNumbers);
     btnNextRound.addEventListener('click', nextRound);
 
-    // init from hash
     window.addEventListener('load', ()=>{
       const hash = location.hash.replace('#','');
       if(hash) el('roomInput').value = hash;
     });
 
-    // -------------------- FUNÇÕES DE SALA --------------------
     function createRoom(){
       const r = (Math.random().toString(36).substr(2,4)).toUpperCase();
       el('roomInput').value = r;
@@ -201,7 +190,7 @@
       if(!roomId){ alert('Coloque um código de sala ou crie uma.'); return; }
       currentRoom = roomId;
       isHost = Boolean(asHost);
-      // write initial room if host
+
       if(isHost){
         set(ref(db, `rooms/${currentRoom}`), {
           createdAt: Date.now(),
@@ -212,27 +201,27 @@
           round: 1,
           players: {},
           order: []
-        }).catch(()=>{}); // ignore errors for test mode
+        }).catch(()=>{});
       }
-      // add player node
+
+      // Atualiza jogador individualmente sem sobrescrever
       update(ref(db, `rooms/${currentRoom}/players/${uid}`), {
         id: uid,
         name: myName,
         hint: '',
         number: null,
         ready: false,
-        joinedAt: Date.now()
+        joinedAt: Date.now(),
+        host: isHost
       });
-      // update UI
+
       el('setup').style.display = 'none';
       el('gameUI').style.display = 'block';
       el('meName').textContent = myName;
       el('meRole').textContent = isHost ? 'Anfitrião' : 'Jogador';
       el('roomId').textContent = currentRoom;
       el('roomLink').value = location.origin + location.pathname + '#' + currentRoom;
-      // set hash
       location.hash = currentRoom;
-      // listen for changes
       listenRoom();
     }
 
@@ -242,7 +231,6 @@
       alert('Link copiado!');
     }
 
-    // -------------------- LISTENER --------------------
     function listenRoom(){
       const refRoom = ref(db, `rooms/${currentRoom}`);
       onValue(refRoom, snap => {
@@ -250,32 +238,24 @@
         localRoomSnapshot = room || {};
         renderRoom(room || {});
       });
-      // listen players separately (speed)
       onValue(ref(db, `rooms/${currentRoom}/players`), snap => {
         renderPlayers(snap.val() || {});
       });
     }
 
-    // -------------------- RENDER --------------------
     function renderRoom(room){
       if(!room) return;
       el('roundInfo').textContent = `Rodada ${room.round || 1} • Fase: ${room.phase || '—'}`;
       if(room.theme !== undefined) el('themeInput').value = room.theme || '';
       if(room.range) { el('minRange').value = room.range.min; el('maxRange').value = room.range.max; }
 
-      // phase panel
       const panel = el('phasePanel');
       panel.innerHTML = '';
-
       const phase = room.phase || 'lobby';
 
       if(phase === 'lobby'){
-        panel.innerHTML = `
-          <div class="small muted">Ainda em lobby. Aguarde jogadores.</div>
-          <div style="margin-top:8px">
-            <button id="btnSetTheme" class="btn-ghost">Salvar tema</button>
-          </div>
-        `;
+        panel.innerHTML = `<div class="small muted">Ainda em lobby. Aguarde jogadores.</div>
+                           <div style="margin-top:8px"><button id="btnSetTheme" class="btn-ghost">Salvar tema</button></div>`;
         panel.querySelector('#btnSetTheme').addEventListener('click', ()=>{
           update(ref(db, `rooms/${currentRoom}`), { theme: el('themeInput').value || ''});
           alert('Tema atualizado.');
@@ -286,14 +266,12 @@
         panel.innerHTML = '';
         const me = (room.players && room.players[uid]) || null;
         if(me){
-          panel.innerHTML = `
-            <div class="small muted">Seu número secreto</div>
-            <div style="font-weight:700;font-size:24px;margin-top:6px">${me.number ?? '—'}</div>
-            <div style="margin-top:8px" class="hint-input">
-              <input id="hintTxt" placeholder="Sua dica (sem falar o número)" />
-              <button id="btnSendHint" class="btn-ghost">Enviar dica</button>
-            </div>
-          `;
+          panel.innerHTML = `<div class="small muted">Seu número secreto</div>
+                             <div style="font-weight:700;font-size:24px;margin-top:6px">${me.number ?? '—'}</div>
+                             <div style="margin-top:8px" class="hint-input">
+                               <input id="hintTxt" placeholder="Sua dica (sem falar o número)" />
+                               <button id="btnSendHint" class="btn-ghost">Enviar dica</button>
+                             </div>`;
           if(me.hint) el('hintTxt').value = me.hint;
           panel.querySelector('#btnSendHint').addEventListener('click', ()=>{
             const hint = el('hintTxt').value.trim();
@@ -312,7 +290,6 @@
         panel.innerHTML = `<div class="small muted">Números revelados — confira o resultado abaixo.</div>`;
       }
 
-      // order / reveal area:
       renderOrderReveal(room);
     }
 
@@ -321,9 +298,10 @@
       list.innerHTML = '';
       const arr = Object.values(playersObj || {}).sort((a,b)=> (a.joinedAt||0)-(b.joinedAt||0));
       arr.forEach(p => {
+        const hostLabel = p.host ? ' (Host)' : '';
         const div = document.createElement('div');
         div.className = 'player';
-        div.innerHTML = `<div><strong>${escapeHtml(p.name)}</strong><div class="muted small">${p.hint ? 'Dica: '+escapeHtml(p.hint) : ''}</div></div>
+        div.innerHTML = `<div><strong>${escapeHtml(p.name)}</strong>${hostLabel}<div class="muted small">${p.hint ? 'Dica: '+escapeHtml(p.hint) : ''}</div></div>
                          <div class="small">${p.ready ? '✅' : ''}</div>`;
         list.appendChild(div);
       });
@@ -340,7 +318,6 @@
 
       const container = document.createElement('div');
       container.className = 'card';
-      // Build ordered list (if no order saved, fallback to players order)
       const effectiveOrder = order.length ? order : Object.keys(players);
 
       const ol = document.createElement('div');
@@ -352,23 +329,18 @@
         const p = players[id] || { name: '—', hint: '', number: null };
         const item = document.createElement('div');
         item.className = 'order-item';
-        item.innerHTML = `
-          <div>
-            <div style="font-weight:700">${idx+1}. ${escapeHtml(p.name)}</div>
-            <div class="muted small">Dica: ${escapeHtml(p.hint || '—')}</div>
-          </div>
-          <div style="display:flex;align-items:center;gap:8px">
-            ${phase === 'reveal' ? `<div style="font-weight:800">${p.number ?? '—'}</div>` : ''}
-            ${isHost && phase === 'ordering' ? `<div><button class="btn-ghost moveUp" data-id="${id}">▲</button><button class="btn-ghost moveDown" data-id="${id}">▼</button></div>` : ''}
-          </div>
-        `;
+        item.innerHTML = `<div><div style="font-weight:700">${idx+1}. ${escapeHtml(p.name)}</div>
+                          <div class="muted small">Dica: ${escapeHtml(p.hint || '—')}</div></div>
+                          <div style="display:flex;align-items:center;gap:8px">
+                          ${phase === 'reveal' ? `<div style="font-weight:800">${p.number ?? '—'}</div>` : ''}
+                          ${isHost && phase === 'ordering' ? `<div><button class="btn-ghost moveUp" data-id="${id}">▲</button><button class="btn-ghost moveDown" data-id="${id}">▼</button></div>` : ''}
+                          </div>`;
         ol.appendChild(item);
       });
 
       container.appendChild(ol);
       box.appendChild(container);
 
-      // attach move handlers
       if(isHost && phase === 'ordering'){
         const ups = container.querySelectorAll('.moveUp');
         ups.forEach(btn => btn.addEventListener('click', ()=> moveInOrder(btn.dataset.id, -1)));
@@ -376,7 +348,6 @@
         downs.forEach(btn => btn.addEventListener('click', ()=> moveInOrder(btn.dataset.id, +1)));
       }
 
-      // show summary of correctness in reveal phase
       if(phase === 'reveal'){
         const summary = document.createElement('div');
         summary.className = 'card';
@@ -393,7 +364,6 @@
       }
     }
 
-    // -------------------- JOGO: DISTRIBUIR / ORDER / REVEAL --------------------
     function startDeal(){
       if(!isHost) { alert('Somente o host pode distribuir.'); return; }
       const room = localRoomSnapshot || {};
@@ -402,91 +372,48 @@
       const min = Number(el('minRange').value||1), max = Number(el('maxRange').value||100);
       if(max - min + 1 < players.length){ alert('Intervalo pequeno demais para jogadores.'); return; }
 
-      // generate unique numbers
       const numbers = uniqueRandoms(players.length, min, max);
+
       const updates = {};
       players.forEach((p, i) => {
-        updates[p.id] = {
-          ...p,
-          number: numbers[i],
-          hint: '',
-          ready: false
-        };
+        updates[p.id] = { ...p, number: numbers[i], hint: '', ready: false };
       });
-      // set room phase to dealt, save order default to insertion order
+
       update(ref(db, `rooms/${currentRoom}`), {
         phase: 'dealt',
-        order: players.map(p => p.id),
+        order: players.map(p=>p.id),
         theme: el('themeInput').value || room.theme || '',
         range: { min, max }
       }).then(()=>{
-        // write players numbers/hint/ready
-        // can't update nested multiple nodes at once with update? we will write players node
-        set(ref(db, `rooms/${currentRoom}/players`), updates);
+        // Atualiza cada jogador individualmente
+        for(const id in updates){
+          update(ref(db, `rooms/${currentRoom}/players/${id}`), updates[id]);
+        }
       });
     }
 
-    function goOrdering(){
-      if(!isHost){ alert('Somente host'); return; }
-      update(ref(db, `rooms/${currentRoom}`), { phase: 'ordering' });
-    }
-
-    function moveInOrder(id, delta){
-      // run simple transaction on order
-      const orderRef = ref(db, `rooms/${currentRoom}/order`);
-      runTransaction(orderRef, cur => {
-        if(!cur) return cur;
-        const idx = cur.indexOf(id);
-        if(idx === -1) return cur;
-        const to = Math.max(0, Math.min(cur.length-1, idx + delta));
-        if(to === idx) return cur;
-        const copy = [...cur];
-        copy.splice(idx,1);
-        copy.splice(to,0,id);
-        return copy;
-      });
-    }
-
-    function revealNumbers(){
-      if(!isHost){ alert('Somente host'); return; }
-      update(ref(db, `rooms/${currentRoom}`), { phase: 'reveal' });
-    }
+    function goOrdering(){ if(!isHost){ alert('Somente host'); return; } update(ref(db, `rooms/${currentRoom}`), { phase: 'ordering' }); }
+    function moveInOrder(id, delta){ runTransaction(ref(db, `rooms/${currentRoom}/order`), cur => { if(!cur) return cur; const idx = cur.indexOf(id); if(idx===-1) return cur; const to = Math.max(0, Math.min(cur.length-1, idx+delta)); if(to===idx) return cur; const copy=[...cur]; copy.splice(idx,1); copy.splice(to,0,id); return copy; }); }
+    function revealNumbers(){ if(!isHost){ alert('Somente host'); return; } update(ref(db, `rooms/${currentRoom}`), { phase: 'reveal' }); }
 
     function nextRound(){
       if(!isHost){ alert('Somente host'); return; }
-      // increment round, clear numbers/hints/ready and set to lobby
       const roomRef = ref(db, `rooms/${currentRoom}`);
       runTransaction(roomRef, cur => {
         if(!cur) return cur;
         cur.phase = 'lobby';
-        cur.round = (cur.round || 1) + 1;
+        cur.round = (cur.round||1)+1;
         cur.order = [];
         cur.theme = el('themeInput').value || cur.theme || '';
         cur.range = { min: Number(el('minRange').value||1), max: Number(el('maxRange').value||100) };
-        // reset players numbers/hints/ready
-        if(cur.players){
-          Object.keys(cur.players).forEach(k=>{
-            cur.players[k].number = null;
-            cur.players[k].hint = '';
-            cur.players[k].ready = false;
-          });
-        }
+        if(cur.players) Object.keys(cur.players).forEach(k=>{ cur.players[k].number=null; cur.players[k].hint=''; cur.players[k].ready=false; });
         return cur;
       });
     }
 
-    // -------------------- UTIL --------------------
-    function uniqueRandoms(n,min,max){
-      const arr = [];
-      for(let i=min;i<=max;i++) arr.push(i);
-      for(let i=arr.length-1;i>0;i--){
-        const j = Math.floor(Math.random()*(i+1));
-        [arr[i],arr[j]] = [arr[j],arr[i]];
-      }
-      return arr.slice(0,n);
-    }
+    function uniqueRandoms(n,min,max){ const arr=[]; for(let i=min;i<=max;i++) arr.push(i); for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr.slice(0,n); }
+    function escapeHtml(s=''){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-    function escapeHtml(s=''){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
   </script>
 </body>
 </html>
