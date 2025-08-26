@@ -185,45 +185,61 @@
     }
 
     function joinRoom(asHost=false){
-      myName = el('name').value.trim() || ('Player-'+uid);
-      const roomId = el('roomInput').value.trim().toUpperCase();
-      if(!roomId){ alert('Coloque um código de sala ou crie uma.'); return; }
-      currentRoom = roomId;
-      isHost = Boolean(asHost);
+  myName = el('name').value.trim() || ('Player-'+uid);
+  const roomId = el('roomInput').value.trim().toUpperCase();
+  if(!roomId){ alert('Coloque um código de sala ou crie uma.'); return; }
 
-      if(isHost){
-        set(ref(db, `rooms/${currentRoom}`), {
-          createdAt: Date.now(),
-          hostId: uid,
-          theme: el('themeInput').value || '',
-          range: { min: Number(el('minRange').value||1), max: Number(el('maxRange').value||100) },
-          phase: 'lobby',
-          round: 1,
-          players: {},
-          order: []
-        }).catch(()=>{});
-      }
+  currentRoom = roomId;
+  isHost = Boolean(asHost);
 
-      // Atualiza jogador individualmente sem sobrescrever
-      update(ref(db, `rooms/${currentRoom}/players/${uid}`), {
-        id: uid,
-        name: myName,
-        hint: '',
-        number: null,
-        ready: false,
-        joinedAt: Date.now(),
-        host: isHost
-      });
+  // write initial room if host
+  if(isHost){
+    const hostPlayer = {
+      id: uid,
+      name: myName,
+      host: true,
+      number: null,
+      hint: '',
+      ready: false,
+      joinedAt: Date.now()
+    };
 
-      el('setup').style.display = 'none';
-      el('gameUI').style.display = 'block';
-      el('meName').textContent = myName;
-      el('meRole').textContent = isHost ? 'Anfitrião' : 'Jogador';
-      el('roomId').textContent = currentRoom;
-      el('roomLink').value = location.origin + location.pathname + '#' + currentRoom;
-      location.hash = currentRoom;
-      listenRoom();
-    }
+    set(ref(db, `rooms/${currentRoom}`), {
+      createdAt: Date.now(),
+      hostId: uid,
+      theme: el('themeInput').value || '',
+      range: { min: Number(el('minRange').value||1), max: Number(el('maxRange').value||100) },
+      phase: 'lobby',
+      round: 1,
+      players: { [uid]: hostPlayer },  // host já é jogador
+      order: []
+    }).catch(()=>{}); // ignore errors for test mode
+  } else {
+    // adiciona jogador sem sobrescrever outros
+    update(ref(db, `rooms/${currentRoom}/players/${uid}`), {
+      id: uid,
+      name: myName,
+      host: false,
+      hint: '',
+      number: null,
+      ready: false,
+      joinedAt: Date.now()
+    });
+  }
+
+  // update UI
+  el('setup').style.display = 'none';
+  el('gameUI').style.display = 'block';
+  el('meName').textContent = myName;
+  el('meRole').textContent = isHost ? 'Anfitrião' : 'Jogador';
+  el('roomId').textContent = currentRoom;
+  el('roomLink').value = location.origin + location.pathname + '#' + currentRoom;
+  location.hash = currentRoom;
+
+  // listen for changes
+  listenRoom();
+}
+
 
     function copyLink(){
       const text = el('roomLink').value || (location.origin + location.pathname + '#' + el('roomInput').value.trim());
@@ -387,7 +403,7 @@
       }).then(()=>{
         // Atualiza cada jogador individualmente
         for(const id in updates){
-          update(ref(db, `rooms/${currentRoom}/players/${id}`), updates[id]);
+            update(ref(db, `rooms/${currentRoom}/players/${id}`), updates[id]);
         }
       });
     }
