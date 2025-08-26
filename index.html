@@ -235,6 +235,7 @@ function joinRoom(asHost=false){
   const playerData = { id: uid, name: myName, host: isHost, number: null, hint:'', ready:false, joinedAt: Date.now() };
 
   if(isHost){
+    // Cria a sala junto com o host
     set(ref(db, `rooms/${currentRoom}`), {
       createdAt: Date.now(),
       hostId: uid,
@@ -246,7 +247,16 @@ function joinRoom(asHost=false){
       order: []
     }).catch(console.error);
   } else {
-    update(ref(db, `rooms/${currentRoom}/players/${uid}`), playerData).catch(console.error);
+    // Garante que o jogador será adicionado mesmo que a sala exista ou não
+    const playerRef = ref(db, `rooms/${currentRoom}/players/${uid}`);
+    runTransaction(playerRef, cur => {
+      if(cur === null) {
+        // Sala já deve existir, mas se não existir, cria só o jogador
+        return playerData;
+      } else {
+        return {...cur, ...playerData};
+      }
+    });
   }
 
   el('setup').style.display='none';
@@ -257,24 +267,13 @@ function joinRoom(asHost=false){
   el('roomLink').value = location.origin + location.pathname + '#' + currentRoom;
   location.hash = currentRoom;
 
-  // Atribuir cor única ao jogador
-  if(!playerData.color){
-    getDatabase().then(()=>{});
-    setTimeout(()=>{
-      onValue(ref(db, `rooms/${currentRoom}/players`), snap=>{
-        const players = snap.val() || {};
-        playerData.color = getUniqueColor(players);
-        if(isHost){
-          set(ref(db, `rooms/${currentRoom}/players/${uid}`), playerData);
-        } else {
-          update(ref(db, `rooms/${currentRoom}/players/${uid}`), playerData);
-        }
-      }, {onlyOnce:true});
-    },100);
-  }
-
   listenRoom();
+
+  // Atribuir cor única via transaction
+  const colorRef = ref(db, `rooms/${currentRoom}/players/${uid}/color`);
+  runTransaction(colorRef, cur => cur || getUniqueColor(localRoomSnapshot?.players||{}));
 }
+
 
 function copyLink(){
   const text = el('roomLink').value || (location.origin+location.pathname+'#'+el('roomInput').value.trim());
