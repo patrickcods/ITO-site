@@ -380,84 +380,53 @@ function renderRoom(room){
   renderOrderReveal(room);
 }
 
-function renderOrderReveal(room){
-  const area = el('orderRevealArea');
-  area.innerHTML = '';
+function renderOrderReveal() {
+  const container = document.getElementById("order-container");
+  container.innerHTML = "";
+
   const order = room.order || [];
-  const players = room.players || {};
+  const maxNumber = Math.max(...Object.values(room.players).map(p => p.number || 0));
 
-  order.forEach(id => {
-    const p = players[id] || { name:'—', color:COLORS[0], hint:'' };
-    const cardWrapper = document.createElement('div');
-    cardWrapper.className = 'order-item card-container';
-    cardWrapper.dataset.id = id;
+  order.forEach(playerId => {
+    const player = room.players[playerId];
+    if (!player) return;
 
-    const card = document.createElement('div');
-    card.className = 'card-flip';
-    card.style.height = '140px';
-    card.style.padding = '16px';
-    card.style.display = 'flex';
-    card.style.alignItems = 'center';
-    card.style.justifyContent = 'center';
-    card.style.background = p.color || '#0b1220';
-    card.style.color = '#fff';
-    card.style.borderRadius = '12px';
-    card.style.textAlign = 'center';
+    // Criar a barra
+    const bar = document.createElement("div");
+    bar.className = "bar";
+    bar.style.background = player.color || "gray";
+    bar.style.margin = "5px 0";
+    bar.style.height = "40px"; // altura maior para ficar visível
 
-    const front = document.createElement('div');
-    front.className = 'card-front';
-    front.style.width = '100%';
+    // Largura proporcional ao número
+    const widthPercent = ((player.number || 0) / maxNumber) * 100;
+    bar.style.width = widthPercent + "%";
 
-    let numberText = '—';
-    if(uid === id || room.phase === 'reveal') numberText = p.number ?? '—';
+    // Texto dentro da barra
+    bar.textContent = `${player.name} - ${player.number}`;
 
-    front.innerHTML = `
-      <div style="display:flex;flex-direction:column;justify-content:center;height:100%;">
-        <strong style="font-size:20px;">${escapeHtml(p.name)}</strong>
-        <div class="muted small" style="margin-top:8px;">${p.hint ? 'Dica: '+escapeHtml(p.hint) : ''}</div>
-        <div style="margin-top:12px;font-weight:700;font-size:24px;">Número: ${escapeHtml(numberText)}</div>
-      </div>
-    `;
-
-    card.appendChild(front);
-
-    if(room.phase === 'reveal'){
-      // adiciona a barra proporcional atrás do número
-      const allNums = Object.values(players).map(p => Number(p.number || 0));
-      let maxNumber = allNums.length ? Math.max(...allNums) : 1;
-      maxNumber = Math.max(maxNumber, 1);
-      const pct = Math.round((Number(p.number || 0) / maxNumber) * 100);
-
-      const bar = document.createElement('div');
-      bar.className = 'reveal-fill';
-      bar.style.position = 'absolute';
-      bar.style.top = '0';
-      bar.style.left = '0';
-      bar.style.height = '100%';
-      bar.style.width = pct + '%';
-      bar.style.background = p.color || '#10b981';
-      bar.style.opacity = '0.3';
-      bar.style.borderRadius = '12px';
-
-      cardWrapper.appendChild(bar);
-    }
-
-    cardWrapper.appendChild(card);
-    area.appendChild(cardWrapper);
+    container.appendChild(bar);
   });
 
-  if(isHost && room.phase === 'ordering'){
-    Sortable.create(area, {
-      animation: 150,
-      onEnd: () => {
-        const newOrder = Array.from(area.children).map(el => el.dataset.id);
-        update(ref(db, `rooms/${currentRoom}`), { order: newOrder });
-      }
-    });
+  // ✅ Verificação automática da ordem após revelar
+  let inOrder = true;
+  for (let i = 0; i < order.length - 1; i++) {
+    const current = room.players[order[i]].number;
+    const next = room.players[order[i + 1]].number;
+    if (current > next) {
+      inOrder = false;
+      break;
+    }
   }
+
+  const result = document.createElement("div");
+  result.style.marginTop = "15px";
+  result.style.fontWeight = "bold";
+  result.textContent = inOrder
+    ? "✅ BOAAAAAAA"
+    : "❌ ERRARAM OTÁRIOS!";
+  container.appendChild(result);
 }
-
-
 
 
 function moveCard(id, delta){
